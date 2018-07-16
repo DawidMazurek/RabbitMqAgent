@@ -76,6 +76,20 @@ func getConnection(vhost string) *amqp.Connection {
 	return conn
 }
 
+func publishMessage(ch *amqp.Channel, obj Message) {
+	err := ch.Publish(
+		obj.Deliver_options.Exchange_name,
+		obj.Deliver_options.Routing_key,
+		false,
+		false,
+		amqp.Publishing {
+			ContentType: "text/plain",
+			Body:        []byte(obj.Payload),
+		})
+
+	failOnError(err, "Failed to publish a message")
+}
+
 func enqueueToRabbitMQ(data []byte) {
 	var obj Message
 	err := json.Unmarshal(data, &obj)
@@ -89,22 +103,12 @@ func enqueueToRabbitMQ(data []byte) {
 	defer ch.Close()
 
 	declareExchange(ch, obj)
+	publishMessage(ch, obj)
+	sendResponseToSocket(obj)
+}
 
-	err = ch.Publish(
-		obj.Deliver_options.Exchange_name,
-		obj.Deliver_options.Routing_key,
-		false,
-		false,
-		amqp.Publishing {
-			ContentType: "text/plain",
-			Body:        []byte(obj.Payload),
-		})
-
-	failOnError(err, "Failed to publish a message")
-
-	//////////////////////////////////////////////////
-
-	var responseSocket string = obj.Response_socket
+func sendResponseToSocket(obj Message) {
+	var responseSocket = obj.Response_socket
 
 	c, err := net.Dial("unix", responseSocket)
 
