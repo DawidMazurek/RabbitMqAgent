@@ -5,11 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"github.com/streadway/amqp"
-	"os"
 )
-
-var connectionPool map[string] *amqp.Connection
 
 func deliverMessage(c net.Conn) {
 	for {
@@ -32,62 +28,6 @@ func dumpDetails(obj Message) {
 	fmt.Printf("echange: %s\n", obj.Deliver_options.Exchange_name)
 	fmt.Printf("routing key: %s\n", obj.Deliver_options.Routing_key)
 	fmt.Printf("Writing response to socket: %s\n", obj.Response_socket)
-}
-
-func declareExchange(ch *amqp.Channel, obj Message) {
-	err := ch.ExchangeDeclare(
-		obj.Deliver_options.Exchange_name,
-		"topic",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-
-	failOnError(err, "Failed to declare exchange")
-}
-
-func getConnection(vhost string) *amqp.Connection {
-	var conn *amqp.Connection
-	var connExists bool
-	conn, connExists = connectionPool[vhost]
-	if connExists {
-		return conn
-	}
-
-	rabbitDSN := fmt.Sprintf("amqp://%s:%s@%s:%s/%s",
-		os.Getenv("RABBITMQ_USER"),
-		os.Getenv("RABBITMQ_PASS"),
-		os.Getenv("RABBITMQ_HOST"),
-		os.Getenv("RABBITMQ_PORT"),
-		vhost,
-	)
-
-	conn, err := amqp.Dial(rabbitDSN)
-	failOnError(err, "Failed to connect to RabbitMQ")
-
-	if connectionPool == nil {
-		connectionPool = map[string] *amqp.Connection{}
-	}
-
-	connectionPool[vhost] = conn
-
-	return conn
-}
-
-func publishMessage(ch *amqp.Channel, obj Message) {
-	err := ch.Publish(
-		obj.Deliver_options.Exchange_name,
-		obj.Deliver_options.Routing_key,
-		false,
-		false,
-		amqp.Publishing {
-			ContentType: "text/plain",
-			Body:        []byte(obj.Payload),
-		})
-
-	failOnError(err, "Failed to publish a message")
 }
 
 func enqueueToRabbitMQ(data []byte) {
@@ -121,11 +61,4 @@ func sendResponseToSocket(obj Message) {
 		log.Println(err)
 	}
 	fmt.Println("Sent.")
-}
-
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Fatalf("%s: %s", msg, err)
-		panic(fmt.Sprintf("%s: %s", msg, err))
-	}
 }
