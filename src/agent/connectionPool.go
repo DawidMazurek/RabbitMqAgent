@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/streadway/amqp"
 	"fmt"
-	"os"
 )
 
 var connectionPool map[string] *amqp.Connection
@@ -16,11 +15,13 @@ func getConnection(vhost string) *amqp.Connection {
 		return conn
 	}
 
+	config := getConnectionConfig()
+
 	rabbitDSN := fmt.Sprintf("amqp://%s:%s@%s:%s/%s",
-		os.Getenv("RABBITMQ_USER"),
-		os.Getenv("RABBITMQ_PASS"),
-		os.Getenv("RABBITMQ_HOST"),
-		os.Getenv("RABBITMQ_PORT"),
+		config.Get("user"),
+		config.Get("pass"),
+		config.Get("host"),
+		config.Get("port"),
 		vhost,
 	)
 
