@@ -9,6 +9,8 @@ import (
 	"os"
 )
 
+var connectionPool map[string] *amqp.Connection
+
 func deliverMessage(c net.Conn) {
 	for {
 		buf := make([]byte, 512)
@@ -46,24 +48,41 @@ func declareExchange(ch *amqp.Channel, obj Message) {
 	failOnError(err, "Failed to declare exchange")
 }
 
-func enqueueToRabbitMQ(data []byte) {
-	var obj Message
-	err := json.Unmarshal(data, &obj)
-
-	dumpDetails(obj)
+func getConnection(vhost string) *amqp.Connection {
+	var conn *amqp.Connection
+	var connExists bool
+	conn, connExists = connectionPool[vhost]
+	if connExists {
+		return conn
+	}
 
 	rabbitDSN := fmt.Sprintf("amqp://%s:%s@%s:%s/%s",
 		os.Getenv("RABBITMQ_USER"),
 		os.Getenv("RABBITMQ_PASS"),
 		os.Getenv("RABBITMQ_HOST"),
 		os.Getenv("RABBITMQ_PORT"),
-		obj.Deliver_options.Vhost,
+		vhost,
 	)
 
 	conn, err := amqp.Dial(rabbitDSN)
 	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
 
+	if connectionPool == nil {
+		connectionPool = map[string] *amqp.Connection{}
+	}
+
+	connectionPool[vhost] = conn
+
+	return conn
+}
+
+func enqueueToRabbitMQ(data []byte) {
+	var obj Message
+	err := json.Unmarshal(data, &obj)
+
+	dumpDetails(obj)
+
+	conn := getConnection(obj.Deliver_options.Vhost);
 
 	ch, err := conn.Channel()
 	failOnError(err, "Failed to open a channel")
